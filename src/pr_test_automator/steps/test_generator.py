@@ -40,17 +40,26 @@ Generate high-quality, production-ready tests following these rules:
 _SYSTEM_PROMPT_INCREMENTAL = """\
 You are an expert Python test engineer specializing in pytest.
 You are writing test functions to be ADDED to an existing test module.
-Your output will be inserted into a file that already has its imports and
-other tests. Follow these rules:
 
-- Output ONLY the new test functions (their decorators and bodies) — no
-  import statements, no module-level code, no markdown, no explanation.
-- Match the style of the existing tests exactly: same decorators, naming
-  conventions, assertion patterns.
-- For async functions, use @pytest.mark.asyncio with async def.
-- Test happy path, edge cases, and error cases for each function.
-- Mock external dependencies using pytest-mock or unittest.mock.
-- Name tests as test_{function_name}_{scenario}.
+CRITICAL — STYLE PRESERVATION:
+- Match the EXACT style of the existing tests in the user's prompt
+- If existing tests use @pytest.mark.unit, your tests must use it
+- If existing tests use `-> None` annotation, your tests must too
+- If existing tests omit docstrings, your tests must too
+- If existing tests use inline asserts (no `result =` variable), match that
+- Mirror the existing naming pattern exactly
+
+Your output will be inserted into a file that already has its imports
+and other tests. Other rules:
+
+- Output ONLY the new test functions (decorators + definitions) — no
+  import statements, no module-level code, no markdown, no explanation
+- For async functions, use @pytest.mark.asyncio with async def
+- Test happy path, edge cases, and error cases for each function
+- Mock external dependencies using pytest-mock or unittest.mock
+- Name tests as test_{function_name}_{scenario}
+- Do not rename existing tests; if replacing a test named X, your new
+  test for the same scenario should also be named X
 """
 
 _USER_TEMPLATE_FRESH = (
@@ -77,19 +86,31 @@ _USER_TEMPLATE_INCREMENTAL = (
     "Source file:    {source_file}\n"
     "Test file:      {test_file}\n"
     "\n"
-    "EXISTING test file content (do NOT repeat these tests):\n"
+    "Existing test file content (PRESERVE this style — match decorators, "
+    "type annotations, naming, and assertion patterns exactly):\n"
     "```python\n"
     "{existing_content}\n"
     "```\n"
-    "\n"
+    "{style_reference_section}"
     "Write tests for ONLY these functions. Existing tests for these "
-    "functions (if any) are being replaced because the source changed.\n"
+    "functions are being replaced because the source changed.\n"
     "\n"
     "{functions_section}"
     "\n"
-    "Output ONLY the new test function definitions (with decorators). Do "
-    "not include imports or other module-level code. Match the existing "
-    "file's style.\n"
+    "Output ONLY the new test function definitions (with their decorators). "
+    "Do NOT include imports or other module-level code. Match the EXACT "
+    "style of the existing tests above — same decorators (e.g. "
+    "@pytest.mark.unit), same type annotations (e.g. -> None), same "
+    "assertion style.\n"
+)
+
+_STYLE_REFERENCE_SECTION = (
+    "\n"
+    "Style reference — the tests being replaced for these functions had "
+    "this style (match it exactly in your output):\n"
+    "```python\n"
+    "{removed_tests_code}\n"
+    "```\n"
 )
 
 _FUNCTION_BLOCK = (
@@ -138,7 +159,10 @@ class TestGenerator:
             results.append(generated)
             logger.info(
                 "generated tests",
-                extra={"source": source_path, "mode": "incremental" if existing else "fresh"},
+                extra={
+                    "source": source_path,
+                    "mode": "incremental" if existing else "fresh",
+                },
             )
 
         return results
@@ -175,15 +199,11 @@ class TestGenerator:
         existing_tests = parse_test_functions(existing.content)
 
         # For each affected function, find existing tests that cover it.
-        # Build a set of test names to remove and a list of function blocks
-        # to send to Claude.
         function_status: list[tuple[AffectedFunction, str, list[TestFunction]]] = []
         tests_to_remove: list[TestFunction] = []
 
         for fn in functions:
-            matching = [
-                t for t in existing_tests if covers(t.name, fn.name)
-            ]
+            matching = [t for t in existing_tests if covers(t.name, fn.name)]
             if matching:
                 status = "MODIFIED - existing tests will be replaced"
                 tests_to_remove.extend(matching)
@@ -191,20 +211,35 @@ class TestGenerator:
                 status = "NEW - no existing tests"
             function_status.append((fn, status, matching))
 
-        # Build the per-function section for the prompt.
         functions_section = "".join(
-            _FUNCTION_BLOCK.format(name=fn.name, status=status, code=fn.source_code)
+            _FUNCTION_BLOCK.format(
+                name=fn.name, status=status, code=fn.source_code
+            )
             for fn, status, _ in function_status
         )
 
-        # Render content without the to-be-removed tests, so Claude sees what
-        # we're really keeping.
+        # Extract the source of tests being removed, so we can show them to
+        # Claude as a style reference separately from the kept content.
+        # Without this, once all covering tests are removed Claude has no
+        # style anchor and reverts to defaults (drops decorators, etc.).
+        removed_tests_code = self._extract_test_source(
+            existing.content, tests_to_remove
+        )
+        style_reference_section = (
+            _STYLE_REFERENCE_SECTION.format(
+                removed_tests_code=removed_tests_code
+            )
+            if removed_tests_code.strip()
+            else ""
+        )
+
         trimmed_existing = self._remove_tests(existing.content, tests_to_remove)
 
         prompt = _USER_TEMPLATE_INCREMENTAL.format(
             source_file=source_path,
             test_file=existing.test_file_path,
             existing_content=trimmed_existing,
+            style_reference_section=style_reference_section,
             functions_section=functions_section,
         )
 
@@ -212,8 +247,6 @@ class TestGenerator:
             _SYSTEM_PROMPT_INCREMENTAL, prompt, source_path
         )
         new_test_code = extract_code_block(raw).strip()
-
-        # Append new tests to the trimmed existing content with proper spacing.
         merged = self._merge(trimmed_existing, new_test_code)
 
         return GeneratedTest(
@@ -224,20 +257,38 @@ class TestGenerator:
         )
 
     @staticmethod
-    def _remove_tests(content: str, to_remove: list[TestFunction]) -> str:
+    def _extract_test_source(
+        content: str, tests: list[TestFunction]
+    ) -> str:
+        """Return the source code of the given test functions, concatenated.
+
+        Used to give Claude a style reference for tests being replaced.
+        """
+        if not tests:
+            return ""
+
+        lines = content.splitlines(keepends=True)
+        blocks: list[str] = []
+        for t in tests:
+            block = "".join(lines[t.line_start - 1 : t.line_end])
+            blocks.append(block.rstrip())
+        return "\n\n".join(blocks)
+
+    @staticmethod
+    def _remove_tests(
+        content: str, to_remove: list[TestFunction]
+    ) -> str:
         """Remove the given test functions from content. Lines are 1-indexed."""
         if not to_remove:
             return content
 
         lines = content.splitlines(keepends=True)
-        # Build a set of line indices (0-based) to drop.
         drop: set[int] = set()
         for test in to_remove:
             for i in range(test.line_start - 1, test.line_end):
                 drop.add(i)
 
         kept = [line for i, line in enumerate(lines) if i not in drop]
-        # Collapse runs of blank lines that may result from removal.
         return _collapse_blank_runs("".join(kept))
 
     @staticmethod
@@ -245,7 +296,7 @@ class TestGenerator:
         """Append ``new_tests`` to ``existing`` with proper spacing."""
         if not new_tests:
             return existing
-        existing = existing.rstrip() + "\n\n\n"  # 2 blank lines between blocks
+        existing = existing.rstrip() + "\n\n\n"
         return existing + new_tests.rstrip() + "\n"
 
     def _call_claude(
