@@ -20,7 +20,7 @@ _SUMMARY_RE = re.compile(
 )
 _FAILED_ID_RE = re.compile(r"FAILED\s+(\S+)")
 _TIMEOUT_SECONDS = 120
-_TEMP_PREFIX = ".pr_automator_"
+_TEMP_PREFIX = "_pr_automator_"
 
 
 class TestRunner:
