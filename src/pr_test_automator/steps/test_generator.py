@@ -107,7 +107,7 @@ class TestGenerator:
 
         raw = message.content[0].text
         code = extract_code_block(raw)
-        test_path = self._test_finder.suggest_test_path(source_path)
+        test_path = self._test_finder.suggest_test_path(source_path, existing=existing)
 
         return GeneratedTest(
             source_file_path=source_path,
