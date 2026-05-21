@@ -34,7 +34,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run PR Test Automator
-        uses: your-org/pr-test-automator@v0.1.0
+        uses: gautamkumar-asurint/pr-test-automator@v0.1.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}

@@ -48,7 +48,7 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
 
-      - uses: your-org/pr-test-automator@v0.1.0
+      - uses: gautamkumar-asurint/pr-test-automator@v0.1.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -131,7 +131,7 @@ python -m pr_test_automator
 ## Development
 
 ```bash
-git clone https://github.com/your-org/pr-test-automator.git
+git clone https://github.com/gautamkumar-asurint/pr-test-automator.git
 cd pr-test-automator
 pip install -e ".[dev]"
 pytest

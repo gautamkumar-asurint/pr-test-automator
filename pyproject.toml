@@ -35,9 +35,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/pr-test-automator"
-Repository = "https://github.com/your-org/pr-test-automator"
-Issues = "https://github.com/your-org/pr-test-automator/issues"
+Homepage = "https://github.com/gautamkumar-asurint/pr-test-automator"
+Repository = "https://github.com/gautamkumar-asurint/pr-test-automator"
+Issues = "https://github.com/gautamkumar-asurint/pr-test-automator/issues"
 
 [project.scripts]
 pr-test-automator = "pr_test_automator.__main__:main"

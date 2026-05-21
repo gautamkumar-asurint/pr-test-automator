@@ -2,7 +2,7 @@ name: PR Test Automator
 description: >
   Auto-generate pytest tests for Python code changed in a pull request,
   run them, fix failures with Claude, and post the result as a PR comment.
-author: your-org
+author: gautamkumar-asurint
 
 branding:
   icon: check-circle
