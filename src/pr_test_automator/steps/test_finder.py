@@ -64,17 +64,17 @@ class TestFinder:
     def suggest_test_path(
         self,
         source_path: str,
-        existing: ExistingTest | None = None,
+        existing: ExistingTest | None = None,  # kept for signature compatibility
     ) -> str:
-        """Return the preferred path for a NEW test file for ``source_path``.
+        """Return the test file path for ``source_path`` — always the same name.
 
-        When ``existing`` is provided (the source already has a test file
-        authored by humans), we write to ``test_<stem>_generated.py`` instead
-        so we never overwrite the developer's work.
+        We no longer create separate ``_generated`` files because the generator
+        now merges intelligently into the existing file when one is present.
         """
+        if existing:
+            return existing.test_file_path
         stem = os.path.splitext(os.path.basename(source_path))[0]
-        suffix = "_generated" if existing else ""
-        test_name = f"test_{stem}{suffix}.py"
+        test_name = f"test_{stem}.py"
         preferred_dir = (
             self._config.test_dirs[0] if self._config.test_dirs else "tests"
         )
