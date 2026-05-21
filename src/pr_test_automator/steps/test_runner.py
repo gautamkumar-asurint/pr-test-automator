@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import subprocess
-import tempfile
 
 from pr_test_automator._logging import get_logger
 from pr_test_automator.config import PRTestConfig
@@ -20,10 +20,13 @@ _SUMMARY_RE = re.compile(
 )
 _FAILED_ID_RE = re.compile(r"FAILED\s+(\S+)")
 _TIMEOUT_SECONDS = 120
+_TEMP_PREFIX = ".pr_automator_"
 
 
 class TestRunner:
-    """Writes generated tests to a temp directory and executes pytest."""
+    """Writes generated tests into the consumer's test directory, runs pytest,
+    then cleans up — so pytest config (markers, conftest, fixtures) applies.
+    """
 
     def __init__(self, config: PRTestConfig) -> None:
         self._config = config
@@ -40,9 +43,15 @@ class TestRunner:
                 is_passing=True,
             )
 
-        with tempfile.TemporaryDirectory(prefix="pr_tests_") as tmp:
-            test_files = self._write_tests(tests, tmp)
-            output, return_code = self._run_pytest(test_files)
+        target_dir = self._target_test_dir()
+        os.makedirs(target_dir, exist_ok=True)
+
+        written: list[str] = []
+        try:
+            written = self._write_tests(tests, target_dir)
+            output, return_code = self._run_pytest(written)
+        finally:
+            self._cleanup(written)
 
         result = self._parse_output(output, return_code)
         logger.info(
@@ -55,20 +64,51 @@ class TestRunner:
         )
         return result
 
+    def _target_test_dir(self) -> str:
+        """Choose where to drop the generated tests inside the repo.
+
+        Uses the first entry in test_dirs; falls back to 'tests' if none.
+        """
+        first = (
+            self._config.test_dirs[0] if self._config.test_dirs else "tests"
+        )
+        return os.path.join(self._config.repo_path, first)
+
     def _write_tests(
         self,
         tests: list[GeneratedTest],
-        directory: str,
+        target_dir: str,
     ) -> list[str]:
-        paths: list[str] = []
+        """Write each generated test file with a prefix to prevent collisions.
+
+        Returns the list of absolute paths actually written.
+        """
+        written: list[str] = []
         for gen in tests:
             base = os.path.basename(gen.test_file_path)
-            dest = os.path.join(directory, base)
+            safe_name = f"{_TEMP_PREFIX}{base}"
+            dest = os.path.join(target_dir, safe_name)
+
+            # Defensive: refuse to overwrite a file that's somehow already there.
+            if os.path.exists(dest):
+                logger.warning(
+                    "skipping write — temp file already exists",
+                    extra={"path": dest},
+                )
+                continue
+
             with open(dest, "w", encoding="utf-8") as fh:
                 fh.write(gen.content)
-            paths.append(dest)
-            logger.info("wrote temp test file", extra={"path": dest})
-        return paths
+            written.append(dest)
+            logger.info("wrote ephemeral test file", extra={"path": dest})
+        return written
+
+    def _cleanup(self, paths: list[str]) -> None:
+        """Best-effort removal of files we wrote. Never raises."""
+        for path in paths:
+            with contextlib.suppress(OSError):
+                os.remove(path)
+                logger.info("cleaned up ephemeral test", extra={"path": path})
 
     def _run_pytest(self, test_files: list[str]) -> tuple[str, int]:
         cmd = [
