@@ -10,7 +10,7 @@ branding:
 
 inputs:
   github-token:
-    description: GitHub token (use `${{ secrets.GITHUB_TOKEN }}`).
+    description: 'GitHub token. Pass secrets.GITHUB_TOKEN from your workflow.'
     required: true
   anthropic-api-key:
     description: Anthropic API key.
@@ -27,9 +27,7 @@ inputs:
     required: false
     default: tests
   source-root:
-    description: >
-      Restrict analysis to Python files under this repo-relative directory.
-      Leave empty to analyze every Python file in the diff.
+    description: Restrict analysis to Python files under this repo-relative directory.
     required: false
     default: ""
   push-test-commit:
@@ -49,10 +47,7 @@ inputs:
     required: false
     default: "false"
   install-extra-requirements:
-    description: >
-      Path to a requirements file with additional project deps (e.g.
-      ``requirements.txt``) that must be installed before tests can be
-      generated. Leave empty if your project has no extra deps.
+    description: Path to a requirements file with additional project deps.
     required: false
     default: ""
 
@@ -64,11 +59,11 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
-    - name: Install pr-test-automator
+    - name: Install pr-test-automator from GitHub
       shell: bash
       run: |
         python -m pip install --upgrade pip
-        pip install "git+https://github.com/gautamkumar-asurint/pr-test-automator.git@v0.1.0"
+        pip install "git+https://github.com/gautamkumar-asurint/pr-test-automator.git@${{ github.action_ref }}"
         pip install pytest pytest-asyncio pytest-mock
 
     - name: Install project requirements
