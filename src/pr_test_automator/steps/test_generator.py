@@ -29,6 +29,8 @@ Generate high-quality, production-ready tests following these rules:
 - Name tests as test_{function_name}_{scenario} (e.g. test_get_user_not_found)
 - Write descriptive assertion messages
 - Import only what is needed — no unused imports
+- Do NOT manipulate sys.path or use Path() tricks; assume the package is
+  installed
 - Output ONLY valid Python code, no markdown, no explanation
 """
 
@@ -37,6 +39,11 @@ Generate pytest tests for the following Python function(s).
 
 Source file: {source_file}
 
+To import from this file, derive the Python module path by dropping any
+"src/" prefix and converting slashes to dots, omitting the ".py" extension.
+For example, "src/calculator/discount.py" becomes
+"from calculator.discount import ...".
+
 Functions to test:
 ```python
 {functions_code}
@@ -44,13 +51,14 @@ Functions to test:
 
 {existing_tests_section}
 
-Produce a complete, self-contained test module. Import the functions under
-test from their correct module path. Use unittest.mock or pytest-mock for all
-external dependencies.
+Produce a complete, self-contained test module that contains ONLY tests for
+the functions listed above. Do not include or repeat any pre-existing tests.
+Use unittest.mock or pytest-mock for all external dependencies.
 """
 
 _EXISTING_TESTS_SECTION = """\
-Existing tests in this project (match the style exactly):
+Existing tests in this project (match the style exactly — same decorators,
+naming convention, and assertion patterns):
 ```python
 {existing_code}
 ```
@@ -107,7 +115,9 @@ class TestGenerator:
 
         raw = message.content[0].text
         code = extract_code_block(raw)
-        test_path = self._test_finder.suggest_test_path(source_path, existing=existing)
+        test_path = self._test_finder.suggest_test_path(
+            source_path, existing=existing
+        )
 
         return GeneratedTest(
             source_file_path=source_path,

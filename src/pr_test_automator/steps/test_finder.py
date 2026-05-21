@@ -61,20 +61,21 @@ class TestFinder:
         with open(path, encoding="utf-8") as fh:
             return fh.read()
 
-def suggest_test_path(
-    self,
-    source_path: str,
-    existing: ExistingTest | None = None,
-) -> str:
-    """Return the preferred path for a NEW test file for ``source_path``.
+    def suggest_test_path(
+        self,
+        source_path: str,
+        existing: ExistingTest | None = None,
+    ) -> str:
+        """Return the preferred path for a NEW test file for ``source_path``.
 
-    If existing tests for this source already exist, write to a
-    ``test_<stem>_generated.py`` file so we never overwrite the human's tests.
-    """
-    stem = os.path.splitext(os.path.basename(source_path))[0]
-    suffix = "_generated" if existing else ""
-    test_name = f"test_{stem}{suffix}.py"
-    preferred_dir = (
-        self._config.test_dirs[0] if self._config.test_dirs else "tests"
-    )
-    return os.path.join(preferred_dir, test_name)
+        When ``existing`` is provided (the source already has a test file
+        authored by humans), we write to ``test_<stem>_generated.py`` instead
+        so we never overwrite the developer's work.
+        """
+        stem = os.path.splitext(os.path.basename(source_path))[0]
+        suffix = "_generated" if existing else ""
+        test_name = f"test_{stem}{suffix}.py"
+        preferred_dir = (
+            self._config.test_dirs[0] if self._config.test_dirs else "tests"
+        )
+        return os.path.join(preferred_dir, test_name)

@@ -65,7 +65,7 @@ class TestRunner:
         return result
 
     def _target_test_dir(self) -> str:
-        """Choose where to drop the generated tests inside the repo.
+        """Choose where to drop ephemeral tests inside the repo.
 
         Uses the first entry in test_dirs; falls back to 'tests' if none.
         """
@@ -89,7 +89,6 @@ class TestRunner:
             safe_name = f"{_TEMP_PREFIX}{base}"
             dest = os.path.join(target_dir, safe_name)
 
-            # Defensive: refuse to overwrite a file that's somehow already there.
             if os.path.exists(dest):
                 logger.warning(
                     "skipping write — temp file already exists",
