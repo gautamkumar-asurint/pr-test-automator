@@ -1,0 +1,93 @@
+name: PR Test Automator
+description: >
+  Auto-generate pytest tests for Python code changed in a pull request,
+  run them, fix failures with Claude, and post the result as a PR comment.
+author: your-org
+
+branding:
+  icon: check-circle
+  color: purple
+
+inputs:
+  github-token:
+    description: GitHub token (use `${{ secrets.GITHUB_TOKEN }}`).
+    required: true
+  anthropic-api-key:
+    description: Anthropic API key.
+    required: true
+  pr-number:
+    description: Pull request number to process.
+    required: true
+  python-version:
+    description: Python version to set up.
+    required: false
+    default: "3.13"
+  test-dirs:
+    description: Comma-separated list of test directories (priority order).
+    required: false
+    default: tests
+  source-root:
+    description: >
+      Restrict analysis to Python files under this repo-relative directory.
+      Leave empty to analyze every Python file in the diff.
+    required: false
+    default: ""
+  push-test-commit:
+    description: When "true", commit generated tests back to the PR branch.
+    required: false
+    default: "false"
+  max-fix-retries:
+    description: Number of times the fixer loop re-runs after failures.
+    required: false
+    default: "3"
+  model:
+    description: Anthropic model id used for generation and fixing.
+    required: false
+    default: ""
+  hard-gate:
+    description: When "true", fail the workflow if any generated test fails.
+    required: false
+    default: "false"
+  install-extra-requirements:
+    description: >
+      Path to a requirements file with additional project deps (e.g.
+      ``requirements.txt``) that must be installed before tests can be
+      generated. Leave empty if your project has no extra deps.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install pr-test-automator
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install "pr-test-automator>=0.1.0"
+        pip install pytest pytest-asyncio pytest-mock
+
+    - name: Install project requirements
+      if: inputs.install-extra-requirements != ''
+      shell: bash
+      run: |
+        pip install -r "${{ inputs.install-extra-requirements }}"
+
+    - name: Run PR Test Automator
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        TEST_DIRS: ${{ inputs.test-dirs }}
+        SOURCE_ROOT: ${{ inputs.source-root }}
+        PUSH_TEST_COMMIT: ${{ inputs.push-test-commit }}
+        MAX_FIX_RETRIES: ${{ inputs.max-fix-retries }}
+        MODEL: ${{ inputs.model }}
+        HARD_GATE: ${{ inputs.hard-gate }}
+      run: python -m pr_test_automator

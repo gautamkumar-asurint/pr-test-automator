@@ -1,0 +1,60 @@
+name: PR Test Automator
+
+# Drop this file into ``.github/workflows/`` of any Python repo that wants
+# auto-generated tests on every PR. Customize the inputs below to match
+# your project layout.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    # Restrict to PRs targeting these branches:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: write       # only needed if push-test-commit is "true"
+  pull-requests: write  # required to post the PR comment
+
+jobs:
+  pr-test-automator:
+    name: Generate & run tests for changed code
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          # Check out the PR head, not the merge commit, so generated
+          # tests can be pushed back to the same branch if desired.
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+          # Required for push-test-commit to be able to push.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run PR Test Automator
+        uses: your-org/pr-test-automator@v0.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          pr-number: ${{ github.event.pull_request.number }}
+          python-version: "3.13"
+
+          # Where to look for / write generated tests (first entry is
+          # the destination directory for new test files).
+          test-dirs: "tests"
+
+          # Only analyze files under this directory. Leave blank to
+          # analyze every Python file in the diff.
+          source-root: "src"
+
+          # Install your project's runtime deps so generated tests can
+          # import the modules under test.
+          install-extra-requirements: "requirements.txt"
+
+          # Set to "true" to commit generated tests back to the PR.
+          push-test-commit: "false"
+
+          # Set to "true" to block merging if generated tests fail.
+          hard-gate: "false"
