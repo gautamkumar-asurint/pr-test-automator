@@ -117,6 +117,8 @@ class TestRunner:
             "--tb=short",
             "--no-header",
             "-q",
+            "-o", "addopts=",          # ← override project's addopts
+            "-p", "no:cacheprovider",  # ← skip cache, irrelevant for ephemeral tests
             *test_files,
         ]
         try:
